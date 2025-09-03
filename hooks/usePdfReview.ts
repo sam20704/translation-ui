@@ -17,23 +17,37 @@ export function usePdfReview() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const process = async (file: File) => {
+  /**
+   * Processes three files:
+   * @param original - The original English PDF
+   * @param groundTruth - The ground-truth German PDF
+   * @param llm - The LLM-generated German PDF (to be highlighted)
+   */
+  const process = async (original: File, groundTruth: File, llm: File) => {
     setIsLoading(true);
     setError(null);
     setData(null);
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('original', original);
+      formData.append('groundTruth', groundTruth);
+      formData.append('llm', llm);
 
-      const response = await fetch('/api/process-pdf', { method: 'POST', body: formData });
-      if (!response.ok) throw new Error('Failed to process PDF');
+      const response = await fetch('/api/process-pdf', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error('Failed to process PDFs – server error.');
 
       const result: ReviewData = await response.json();
 
-      // Optional: Prefetch PDF to ensure availability
-      const pdfResponse = await fetch(result.translatedPdfUrl);
-      if (!pdfResponse.ok) throw new Error('Translated PDF not found');
+      // Optional: Prefetch PDF to ensure availability (avoids broken PDF preview)
+      if (result?.translatedPdfUrl) {
+        const pdfResponse = await fetch(result.translatedPdfUrl);
+        if (!pdfResponse.ok) throw new Error('Translated PDF not found at returned URL.');
+      }
 
       setData(result);
     } catch (err: any) {

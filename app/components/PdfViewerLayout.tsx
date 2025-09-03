@@ -1,46 +1,48 @@
 // app/components/PdfViewerLayout.tsx
-import { useState } from 'react';
+import React from 'react';
 import { Viewer, Worker } from '@react-pdf-viewer/core';
 import type { Plugin } from '@react-pdf-viewer/core';
 
+import '@react-pdf-viewer/core/lib/styles/index.css';
+import '@react-pdf-viewer/default-layout/lib/styles/index.css';
+import '@react-pdf-viewer/search/lib/styles/index.css';
+
 interface PdfViewerLayoutProps {
-  originalPdfUrl: string;
-  translatedPdfUrl: string;
-  highlightMessage: string;
-  defaultLayoutPlugin: Plugin;
-  searchPlugin: Plugin;
+  title: string;
+  fileUrl: string;
+  pluginInstances: Plugin[];
+  highlightMessage?: string;
 }
 
-export function PdfViewerLayout({ originalPdfUrl, translatedPdfUrl, highlightMessage, defaultLayoutPlugin, searchPlugin }: PdfViewerLayoutProps) {
-  const [activeTab, setActiveTab] = useState<'original' | 'translated'>('original');
-
+/**
+ * Generic PDF viewer layout for use in grid views (side-by-side).
+ * Shows a header, empty message, file preview, and (optionally) highlight info.
+ */
+export function PdfViewerLayout({
+  title,
+  fileUrl,
+  pluginInstances,
+  highlightMessage,
+}: PdfViewerLayoutProps) {
   return (
-    <section className="w-full">
-      <div className="md:hidden flex border-b mb-4 bg-white rounded-t-lg shadow-lg">
-        <button onClick={() => setActiveTab('original')} className={`flex-1 p-3 font-semibold ${activeTab === 'original' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>Original</button>
-        <button onClick={() => setActiveTab('translated')} className={`flex-1 p-3 font-semibold ${activeTab === 'translated' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>Translated</button>
-      </div>
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4 h-[85vh] bg-white p-4 md:rounded-lg shadow-lg">
-        <div className={`${activeTab === 'original' ? 'block' : 'hidden'} md:block border rounded-lg overflow-hidden flex flex-col`}>
-          <h2 className="text-center font-bold p-2 bg-gray-50 border-b">Original Document</h2>
-          <div className="flex-grow">
-            {originalPdfUrl && (
-              <Worker workerUrl={`https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`}>
-                <Viewer fileUrl={originalPdfUrl} plugins={[defaultLayoutPlugin]} />
-              </Worker>
-            )}
-          </div>
+    <div className="border rounded-lg overflow-hidden bg-white flex flex-col h-full min-h-[400px]">
+      <h2 className="text-center font-bold p-2 bg-gray-50 border-b">{title}</h2>
+      {highlightMessage && (
+        <div className="text-center p-2 text-sm text-yellow-800 bg-yellow-100 border-b">
+          {highlightMessage}
         </div>
-        <div className={`${activeTab === 'translated' ? 'block' : 'hidden'} md:block border rounded-lg overflow-hidden flex flex-col`}>
-          <h2 className="text-center font-bold p-2 bg-gray-50 border-b">Translated Document</h2>
-          {highlightMessage && <p className="text-center p-2 text-sm text-yellow-800 bg-yellow-100">{highlightMessage}</p>}
-          <div className="flex-grow">
-            <Worker workerUrl={`https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`}>
-              <Viewer fileUrl={translatedPdfUrl} plugins={[defaultLayoutPlugin, searchPlugin]} />
-            </Worker>
+      )}
+      <div className="flex-grow h-0">
+        {fileUrl ? (
+          <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js">
+            <Viewer fileUrl={fileUrl} plugins={pluginInstances} />
+          </Worker>
+        ) : (
+          <div className="h-full flex justify-center items-center text-gray-400 text-sm">
+            No PDF loaded.
           </div>
-        </div>
+        )}
       </div>
-    </section>
+    </div>
   );
 }

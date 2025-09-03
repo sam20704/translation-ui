@@ -3,6 +3,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ZoomIn, ZoomOut, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 
+// --- Add this for TypeScript global patching ---
+declare global {
+  interface Window {
+    pdfjsLib?: any;
+  }
+}
+
 interface PDFError {
   id: string;
   type: 'mistranslation' | 'omission';
@@ -37,15 +44,13 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   const currentPageErrors = errors.filter(error => error.page === currentPage);
 
   useEffect(() => {
-    // Load PDF.js library dynamically
     const loadPDFJS = async () => {
       try {
-        // Load PDF.js from CDN
         if (!window.pdfjsLib) {
           const script = document.createElement('script');
           script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
           script.onload = () => {
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            window.pdfjsLib!.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
             loadPDF();
           };
           document.head.appendChild(script);
@@ -64,30 +69,14 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         setPageLoading(true);
         setPageError(null);
 
-        // Check if pdfUrl is a file URL or base64 data
-        let pdfData;
-        if (pdfUrl.startsWith('data:')) {
-          // Handle base64 data URLs
-          pdfData = pdfUrl;
-        } else if (pdfUrl.startsWith('blob:') || pdfUrl.startsWith('http')) {
-          // Handle blob URLs or HTTP URLs
-          pdfData = pdfUrl;
-        } else {
-          // Try to read as file if it's a file path
-          try {
-            const fileData = await window.fs?.readFile(pdfUrl);
-            if (fileData) {
-              pdfData = fileData;
-            } else {
-              throw new Error('File not found');
-            }
-          } catch {
-            // Fallback to treating as URL
-            pdfData = pdfUrl;
-          }
+        if (!window.pdfjsLib) {
+          setPageError('PDF.js library not loaded');
+          setPageLoading(false);
+          return;
         }
-
-        const pdf = await window.pdfjsLib.getDocument(pdfData).promise;
+        // Treat pdfUrl as valid for browser: blob, data, or http(s)
+        const loadingTask = window.pdfjsLib.getDocument(pdfUrl);
+        const pdf = await loadingTask.promise;
         setPdfDoc(pdf);
         setPageLoading(false);
       } catch (error) {
@@ -100,12 +89,14 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     if (pdfUrl) {
       loadPDFJS();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfUrl]);
 
   useEffect(() => {
     if (pdfDoc && canvasRef.current) {
       renderPage();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfDoc, currentPage, zoom]);
 
   const renderPage = async () => {
@@ -113,6 +104,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
 
     try {
       setPageLoading(true);
+      setPageError(null);
       const page = await pdfDoc.getPage(currentPage);
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
@@ -327,3 +319,4 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     </div>
   );
 };
+``
