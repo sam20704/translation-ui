@@ -1,18 +1,23 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { type: string } }
-) {
-  // This would serve the actual PDF files
-  // For now, return a placeholder response
-  const type = params.type; // 'english' or 'german'
-  
-  // In production, you'd retrieve the actual PDF from storage
-  return new NextResponse("PDF content would be served here", {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${type}.pdf"`
+export async function POST(request: NextRequest) {
+  try {
+    const data = await request.formData();
+    const file = data.get('file') as File; // Note: 'file', not 'pdf'
+    
+    if (!file) {
+      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
-  });
+
+    // Your processing logic here
+    // For now, return mock structure:
+    return NextResponse.json({
+      translatedPdfUrl: "/uploads/translated.pdf",
+      suggestions: [],
+      phrasesToHighlight: []
+    });
+
+  } catch (error) {
+    return NextResponse.json({ error: 'Processing failed' }, { status: 500 });
+  }
 }
