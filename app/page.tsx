@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
 import { searchPlugin } from '@react-pdf-viewer/search';
 
@@ -22,12 +22,12 @@ export default function Home() {
 
   const { data: reviewData, isLoading, error, process, reset } = usePdfReview();
 
-  // Instantiate plugins always at top level
-  const defaultLayoutPluginInstance = defaultLayoutPlugin();
-  const searchPluginInstance = searchPlugin();
+  // Memoize plugins ONCE per mount, so highlight/clearHighlights never change!
+  const defaultLayoutPluginInstance = useMemo(() => defaultLayoutPlugin(), []);
+  const searchPluginInstance = useMemo(() => searchPlugin(), []);
   const { highlight, clearHighlights } = searchPluginInstance;
 
-  // Object URL lifecycle
+  // Object URL lifecycle for English original
   useEffect(() => {
     if (!originalPdf) {
       setOriginalPdfUrl('');
@@ -38,6 +38,7 @@ export default function Home() {
     return () => { URL.revokeObjectURL(url); };
   }, [originalPdf]);
 
+  // Object URL/response for LLM German output
   useEffect(() => {
     if (reviewData?.translatedPdfUrl) {
       setLlmPdfUrl(reviewData.translatedPdfUrl);
@@ -52,8 +53,9 @@ export default function Home() {
     return () => { URL.revokeObjectURL(url); };
   }, [llmPdf, reviewData?.translatedPdfUrl]);
 
-  // Highlighting
+  // Highlighting effect (uses a guard flag, **no highlight/clearHighlights deps**)
   useEffect(() => {
+    let active = true;
     if (!reviewData?.phrasesToHighlight || !llmPdfUrl) {
       clearHighlights();
       setHighlightMessage('');
@@ -62,33 +64,47 @@ export default function Home() {
     highlight(
       reviewData.phrasesToHighlight.map(phrase => ({ keyword: phrase, matchCase: true }))
     ).then(matches => {
+      if (!active) return;
       if (!matches.length) setHighlightMessage('No translation mismatches found.');
       else setHighlightMessage(`Highlighted ${matches.length} phrase difference(s) in LLM PDF.`);
-    }).catch(() => setHighlightMessage('Error while highlighting.'));
-    return () => clearHighlights();
-  }, [reviewData?.phrasesToHighlight, llmPdfUrl, highlight, clearHighlights]);
-
-  // File validation
-  const validatePdf = (file: File | null) =>
-    !!file && file.type === 'application/pdf' && file.size <= 10 * 1024 * 1024;
-
-  const handlePdfChange = useCallback((which: 'original' | 'groundTruth' | 'llm') =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0] || null;
-      if (!file) return;
-      if (!validatePdf(file)) {
-        alert('Please select a valid PDF file under 10MB.');
-        e.target.value = '';
-        return;
-      }
-      if (which === 'original') setOriginalPdf(file);
-      if (which === 'groundTruth') setGroundTruthPdf(file);
-      if (which === 'llm') setLlmPdf(file);
-      reset();
+    }).catch(() => {
+      if (active) setHighlightMessage('Error while highlighting.');
+    });
+    return () => {
+      active = false;
       clearHighlights();
-      setHighlightMessage('');
-    }
-  ,[reset, clearHighlights]);
+    };
+    // Only depend on state/refs that affect highlighting
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewData?.phrasesToHighlight, llmPdfUrl]);
+
+  // Memoize validatePdf so handlePdfChange is stable
+  const validatePdf = useCallback(
+    (file: File | null) =>
+      !!file && file.type === 'application/pdf' && file.size <= 10 * 1024 * 1024,
+    []
+  );
+
+  // Stable, dependency-safe file-upload handler
+  const handlePdfChange = useCallback(
+    (which: 'original' | 'groundTruth' | 'llm') =>
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0] || null;
+        if (!file) return;
+        if (!validatePdf(file)) {
+          alert('Please select a valid PDF file under 10MB.');
+          e.target.value = '';
+          return;
+        }
+        if (which === 'original') setOriginalPdf(file);
+        if (which === 'groundTruth') setGroundTruthPdf(file);
+        if (which === 'llm') setLlmPdf(file);
+        reset();
+        clearHighlights();
+        setHighlightMessage('');
+      },
+    [validatePdf, reset, clearHighlights]
+  );
 
   const canProcess = originalPdf && groundTruthPdf && llmPdf && !isLoading;
 
