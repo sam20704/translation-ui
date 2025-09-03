@@ -1,93 +1,97 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-
-// Import types and plugins from the PDF viewer library
 import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
 import { searchPlugin } from '@react-pdf-viewer/search';
-import type { Match } from '@react-pdf-viewer/search';
+import type { Plugin } from '@react-pdf-viewer/core';
 
-// Import our new components and the custom hook
-import { usePdfReview } from '../hooks/usePdfReview'; // Correct path to hooks folder
-import { FileUpload } from './components/FileUpload';
-import { PdfViewerLayout } from './components/PdfViewerLayout';
-import { SuggestionsTable } from './components/SuggestionsTable';
+import { usePdfReview } from '../hooks/usePdfReview';
+
+import { FileUpload } from './components/FileUpload'; // Your existing component to select PDF files
+import { PdfViewerLayout } from './components/PdfViewerLayout'; // Layout component for side-by-side viewers
+import { SuggestionsTable } from './components/SuggestionsTable'; // Component to display suggestions
 
 export default function Home() {
-  // State for the uploaded file itself
   const [originalPdfFile, setOriginalPdfFile] = useState<File | null>(null);
   const [originalPdfUrl, setOriginalPdfUrl] = useState<string>('');
-  
-  // Custom hook now manages all API state (data, loading, error)
-  const { data: reviewData, isLoading, error, processFile, reset } = usePdfReview();
-
-  // State for UI feedback specific to this page
+  const { data: reviewData, isLoading, error, process, reset } = usePdfReview();
   const [highlightMessage, setHighlightMessage] = useState<string>('');
 
-  // Memoize plugin instances so they don't get recreated on every render.
-  // This is a performance optimization.
+  // Create plugin instances once (memoized)
   const { defaultLayoutPluginInstance, searchPluginInstance } = useMemo(() => {
-    const defaultLayoutPluginInstance = defaultLayoutPlugin();
-    const searchPluginInstance = searchPlugin();
-    return { defaultLayoutPluginInstance, searchPluginInstance };
+    return {
+      defaultLayoutPluginInstance: defaultLayoutPlugin(),
+      searchPluginInstance: searchPlugin(),
+    };
   }, []);
-  
+
   const { highlight, clearHighlights } = searchPluginInstance;
 
-  // Effect for handling highlights - with the corrected type for `matches`
+  // Synchronize highlights based on backend phrases
   useEffect(() => {
     if (reviewData?.phrasesToHighlight && reviewData.phrasesToHighlight.length > 0) {
       highlight(
-        reviewData.phrasesToHighlight.map(phrase => ({ keyword: phrase, matchCase: true }))
-      ).then((matches: Match[]) => {
-        // CORRECTED: Check the length of the results array to see if any matches were found.
+        reviewData.phrasesToHighlight.map(phrase => ({
+          keyword: phrase,
+          matchCase: true,
+        }))
+      ).then(matches => {
         if (matches.length === 0) {
-          setHighlightMessage('Note: AI suggestions were generated, but the exact phrases were not found to apply highlights.');
+          setHighlightMessage('Note: No matching phrases found in PDF for highlighting.');
         } else {
           setHighlightMessage('');
         }
-      }).catch(error => {
-          console.error("Error during highlighting:", error);
-          // Optionally, you could set an error state here
+      }).catch(() => {
+        setHighlightMessage('');
       });
+    } else {
+      clearHighlights();
+      setHighlightMessage('');
     }
-  }, [reviewData, highlight]);
+  }, [reviewData, highlight, clearHighlights]);
 
-  // Effect for creating and revoking the temporary PDF URL to prevent memory leaks
+  // Create URL object from uploaded file
   useEffect(() => {
-    if (!originalPdfFile) return;
+    if (!originalPdfFile) {
+      setOriginalPdfUrl('');
+      return;
+    }
     const url = URL.createObjectURL(originalPdfFile);
     setOriginalPdfUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [originalPdfFile]);
 
-  // Handler for when a new file is selected by the user
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setOriginalPdfFile(e.target.files[0]);
-      reset(); // Reset the API state from our custom hook
-      clear(); // Clear any old highlights from the viewer plugin
-    }
+  const handleFileChange = (file: File) => {
+    setOriginalPdfFile(file);
+    reset();
+    clearHighlights();
+    setHighlightMessage('');
   };
-  
-  // Handler to start the review process
-  const handleProcessAndReview = () => {
-    if (originalPdfFile) {
-      processFile(originalPdfFile);
-    }
+
+  // Trigger backend processing
+  const handleProcess = () => {
+    if (originalPdfFile) process(originalPdfFile);
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-4 md:p-8 bg-gray-100">
-      <div className="w-full max-w-7xl">
-        <header className="mb-8 text-center">
-          <h1 className="text-3xl md:text-5xl font-bold text-gray-800">PDF Translation Reviewer</h1>
-          <p className="text-gray-600 mt-2">Upload a PDF, see the translation, and get AI-powered corrections.</p>
+    <main className='flex flex-col items-center min-h-screen p-4 md:p-8 bg-gray-100'>
+      <div className='w-full max-w-7xl'>
+        <header className='text-center mb-8'>
+          <h1 className='text-4xl font-bold text-gray-900'>PDF Translation Reviewer</h1>
+          <p className='text-gray-700 mt-2'>Upload your PDF and review translation errors highlighted in the document.</p>
         </header>
 
-        {/* --- Main Conditional Rendering --- */}
-        {/* If we have review data, show the results. Otherwise, show the upload form. */}
-        {reviewData ? (
+        {!reviewData && (
+          <FileUpload 
+            disabled={isLoading}
+            onFileChange={handleFileChange} 
+            onProcess={handleProcess} 
+            isLoading={isLoading} 
+            error={error || undefined} 
+          />
+        )}
+
+        {reviewData && (
           <>
             <PdfViewerLayout
               originalPdfUrl={originalPdfUrl}
@@ -96,16 +100,9 @@ export default function Home() {
               defaultLayoutPlugin={defaultLayoutPluginInstance}
               searchPlugin={searchPluginInstance}
             />
+
             <SuggestionsTable suggestions={reviewData.suggestions} />
           </>
-        ) : (
-          <FileUpload
-            onFileChange={handleFileChange}
-            onProcess={handleProcessAndReview}
-            isLoading={isLoading}
-            disabled={!originalPdfFile}
-            errorMessage={error}
-          />
         )}
       </div>
     </main>
