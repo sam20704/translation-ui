@@ -1,23 +1,38 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
+import fs from 'fs/promises';
+import path from 'path';
 
-export async function POST(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { type: string } }
+) {
   try {
-    const data = await request.formData();
-    const file = data.get('file') as File; // Note: 'file', not 'pdf'
-    
-    if (!file) {
-      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+    const { type } = params;
+
+    const allowedTypes: Record<string, string> = {
+      english: "english.pdf",
+      german: "groundtruth.pdf",
+      llm: "translated.pdf",
+    };
+
+    if (!(type in allowedTypes)) {
+      return new NextResponse("Invalid PDF type requested", { status: 400 });
     }
 
-    // Your processing logic here
-    // For now, return mock structure:
-    return NextResponse.json({
-      translatedPdfUrl: "/uploads/translated.pdf",
-      suggestions: [],
-      phrasesToHighlight: []
-    });
+    const filename = allowedTypes[type];
+    const filePath = path.join(process.cwd(), 'public', 'uploads', filename);
 
+    const fileBuffer = await fs.readFile(filePath);
+    const uint8Array = new Uint8Array(fileBuffer);
+
+    return new NextResponse(uint8Array, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${filename}"`,
+      },
+    });
   } catch (error) {
-    return NextResponse.json({ error: 'Processing failed' }, { status: 500 });
+    console.error("Error serving PDF:", error);
+    return new NextResponse("Failed to serve PDF", { status: 500 });
   }
 }
