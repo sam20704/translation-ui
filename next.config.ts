@@ -2,9 +2,7 @@
 import { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // Other existing Next.js config...
   webpack(config) {
-    // Alias the 'canvas' module to false (empty) for browser build
     config.resolve = {
       ...(config.resolve || {}),
       alias: {
