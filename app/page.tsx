@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
 import { searchPlugin } from '@react-pdf-viewer/search';
-
 import { usePdfReview } from '../hooks/usePdfReview';
 import { FileUpload } from './components/FileUpload';
 import { PdfViewerLayout } from './components/PdfViewerLayout';
@@ -14,20 +13,19 @@ export default function Home() {
   const [originalPdf, setOriginalPdf] = useState<File | null>(null);
   const [groundTruthPdf, setGroundTruthPdf] = useState<File | null>(null);
   const [llmPdf, setLlmPdf] = useState<File | null>(null);
-
   // Object URLs
   const [originalPdfUrl, setOriginalPdfUrl] = useState('');
   const [llmPdfUrl, setLlmPdfUrl] = useState('');
   const [highlightMessage, setHighlightMessage] = useState('');
-
+  // Custom hook for PDF review backend flow
   const { data: reviewData, isLoading, error, process, reset } = usePdfReview();
 
-  // Memoize plugins ONCE per mount, so highlight/clearHighlights never change!
-  const defaultLayoutPluginInstance = useMemo(() => defaultLayoutPlugin(), []);
-  const searchPluginInstance = useMemo(() => searchPlugin(), []);
+  // Create plugin instances at top level (no useMemo)
+  const defaultLayoutPluginInstance = defaultLayoutPlugin();
+  const searchPluginInstance = searchPlugin();
   const { highlight, clearHighlights } = searchPluginInstance;
 
-  // Object URL lifecycle for English original
+  // Create/revoke object URL for English original PDF
   useEffect(() => {
     if (!originalPdf) {
       setOriginalPdfUrl('');
@@ -35,10 +33,12 @@ export default function Home() {
     }
     const url = URL.createObjectURL(originalPdf);
     setOriginalPdfUrl(url);
-    return () => { URL.revokeObjectURL(url); };
+    return () => {
+      URL.revokeObjectURL(url);
+    };
   }, [originalPdf]);
 
-  // Object URL/response for LLM German output
+  // Create/revoke object URL or use backend URL for LLM German PDF
   useEffect(() => {
     if (reviewData?.translatedPdfUrl) {
       setLlmPdfUrl(reviewData.translatedPdfUrl);
@@ -50,10 +50,12 @@ export default function Home() {
     }
     const url = URL.createObjectURL(llmPdf);
     setLlmPdfUrl(url);
-    return () => { URL.revokeObjectURL(url); };
+    return () => {
+      URL.revokeObjectURL(url);
+    };
   }, [llmPdf, reviewData?.translatedPdfUrl]);
 
-  // Highlighting effect (uses a guard flag, **no highlight/clearHighlights deps**)
+  // Highlighting phrases effect (without highlight/clearHighlights in deps)
   useEffect(() => {
     let active = true;
     if (!reviewData?.phrasesToHighlight || !llmPdfUrl) {
@@ -62,30 +64,34 @@ export default function Home() {
       return;
     }
     highlight(
-      reviewData.phrasesToHighlight.map(phrase => ({ keyword: phrase, matchCase: true }))
-    ).then(matches => {
-      if (!active) return;
-      if (!matches.length) setHighlightMessage('No translation mismatches found.');
-      else setHighlightMessage(`Highlighted ${matches.length} phrase difference(s) in LLM PDF.`);
-    }).catch(() => {
-      if (active) setHighlightMessage('Error while highlighting.');
-    });
+      reviewData.phrasesToHighlight.map((phrase) => ({
+        keyword: phrase,
+        matchCase: true,
+      }))
+    )
+      .then((matches) => {
+        if (!active) return;
+        if (!matches.length) setHighlightMessage('No translation mismatches found.');
+        else setHighlightMessage(`Highlighted ${matches.length} phrase difference(s) in LLM PDF.`);
+      })
+      .catch(() => {
+        if (active) setHighlightMessage('Error while highlighting.');
+      });
     return () => {
       active = false;
       clearHighlights();
     };
-    // Only depend on state/refs that affect highlighting
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewData?.phrasesToHighlight, llmPdfUrl]);
 
-  // Memoize validatePdf so handlePdfChange is stable
+  // Memoized PDF validator
   const validatePdf = useCallback(
     (file: File | null) =>
       !!file && file.type === 'application/pdf' && file.size <= 10 * 1024 * 1024,
     []
   );
 
-  // Stable, dependency-safe file-upload handler
+  // Stable file input handler
   const handlePdfChange = useCallback(
     (which: 'original' | 'groundTruth' | 'llm') =>
       (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,12 +114,14 @@ export default function Home() {
 
   const canProcess = originalPdf && groundTruthPdf && llmPdf && !isLoading;
 
+  // Stable processing trigger with full dependency list
   const handleProcess = useCallback(() => {
     if (originalPdf && groundTruthPdf && llmPdf) {
       process(originalPdf, groundTruthPdf, llmPdf);
     }
   }, [originalPdf, groundTruthPdf, llmPdf, process]);
 
+  // Reset everything cleanly
   const handleReset = useCallback(() => {
     setOriginalPdf(null);
     setGroundTruthPdf(null);
@@ -135,7 +143,6 @@ export default function Home() {
             2. The system will highlight translation mismatches in the LLM output (right pane).
           </p>
         </header>
-
         {/* File uploaders */}
         {!reviewData && (
           <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -162,7 +169,6 @@ export default function Home() {
             />
           </div>
         )}
-
         {/* Buttons */}
         {!reviewData && (
           <div className="mb-8 flex justify-center space-x-2">
@@ -181,7 +187,6 @@ export default function Home() {
             </button>
           </div>
         )}
-
         {/* PDF Viewers */}
         <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
           <PdfViewerLayout
@@ -196,8 +201,7 @@ export default function Home() {
             highlightMessage={highlightMessage}
           />
         </div>
-
-        {/* Suggestions Table and start new review */}
+        {/* Suggestions & Restart */}
         {reviewData && (
           <>
             <div className="mb-4 flex justify-end">
@@ -211,7 +215,6 @@ export default function Home() {
             <SuggestionsTable suggestions={reviewData.suggestions ?? []} />
           </>
         )}
-
         {error && (
           <div className="mt-4 text-red-600 font-semibold text-center">{error}</div>
         )}
