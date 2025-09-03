@@ -1,16 +1,18 @@
-// app/api/process-pdf/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
     const data = await request.formData();
-    const file = data.get('file') as File;
-    if (!file) {
-      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+    const original = data.get('original') as File;
+    const groundTruth = data.get('groundTruth') as File;
+    const llm = data.get('llm') as File;
+
+    if (!original || !groundTruth || !llm) {
+      return NextResponse.json({ error: 'All three files required' }, { status: 400 });
     }
 
-    // TODO: Your translation & QA logic goes here.
-    // For now, return a placeholder response:
+    // TODO: Extract text, run diff, etc.
+
     return NextResponse.json({
       translatedPdfUrl: '/uploads/translated.pdf',
       suggestions: [
