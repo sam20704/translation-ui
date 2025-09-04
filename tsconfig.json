@@ -7,11 +7,14 @@
       "esnext"
     ],
     "typeRoots": ["./node_modules/@types", "./types"],
+    "types": ["node", "pdf-parse", "formidable"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    "types": ["node"],
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,    // ← add this line
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
