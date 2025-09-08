@@ -34,7 +34,7 @@ export function usePdfReview() {
       formData.append('groundTruth', groundTruth);
       formData.append('llm', llm);
 
-      const response = await fetch('/api/process-pdf', {
+      const response = await fetch('/api/pdf/process', {
         method: 'POST',
         body: formData,
       });
