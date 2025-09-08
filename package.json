@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "copy-worker": "node scripts/copy-pdf-worker.mjs",
+    "dev": "npm run copy-worker && next dev",
+    "build": "npm run copy-worker && next build",
     "start": "next start",
     "lint": "eslint"
   },

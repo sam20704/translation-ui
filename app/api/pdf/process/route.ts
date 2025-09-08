@@ -10,9 +10,10 @@ import { diffWords } from 'diff';
 // Import from the main entry to get TypeScript types.
 import * as pdfjs from 'pdfjs-dist';
 
-// Use require.resolve to get the absolute path to the worker script for the runtime.
-// This combination satisfies both TypeScript and the Next.js runtime.
-pdfjs.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/build/pdf.worker.mjs');
+// Set the workerSrc to the path of the file we manually copied to the 'public' directory.
+// We use path.join and process.cwd() to create a stable, absolute path for the server runtime.
+// This completely bypasses the Next.js bundler's resolution issues.
+pdfjs.GlobalWorkerOptions.workerSrc = path.join(process.cwd(), 'public', 'pdf.worker.mjs');
 
 
 // --- CONSTANTS AND HELPERS ---
