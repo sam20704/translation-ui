@@ -1,19 +1,45 @@
-// app/api/pdf/process/route.ts
+// File: app/api/pdf/process/route.ts
 
-// Polyfill to ensure pdfjs-dist works correctly in Next.js
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import pdfParse from 'pdf-parse';
 import { diffWords } from 'diff';
 
-// Allow only up to 10 MB files
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // bytes
+// --- ROBUST PDF PARSING SETUP ---
+import * as pdfjs from 'pdfjs-dist';
+
+// CORRECTED WORKER IMPORT for modern versions of pdfjs-dist
+import 'pdfjs-dist/build/pdf.worker.mjs';
+
+
+// --- CONSTANTS AND HELPERS ---
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB in bytes
 
 function isPDF(file: File): boolean {
   return file.type === 'application/pdf' && file.name.toLowerCase().endsWith('.pdf');
 }
+
+async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(pdfBuffer) });
+  const pdf = await loadingTask.promise;
+  let fullText = '';
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items
+      .map(item => ('str' in item ? item.str : ''))
+      .join(' ');
+    fullText += pageText + '\n';
+  }
+
+  return fullText.trim();
+}
+
+
+// --- API ROUTE HANDLER ---
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +48,7 @@ export async function POST(request: NextRequest) {
     const groundTruthFile = formData.get('groundTruth') as File | null;
     const llmFile = formData.get('llm') as File | null;
 
-    // Validate inputs
+    // 1. Validate inputs
     if (!originalFile || !groundTruthFile || !llmFile) {
       return NextResponse.json({ error: 'All three PDF files (original, groundTruth, llm) are required' }, { status: 400 });
     }
@@ -31,47 +57,47 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'All files must be valid PDFs.' }, { status: 400 });
       }
       if (file.size > MAX_FILE_SIZE) {
-        return NextResponse.json({ error: 'Files must not exceed 10MB.' }, { status: 400 });
+        return NextResponse.json({ error: `File "${file.name}" exceeds the 10MB limit.` }, { status: 400 });
       }
     }
 
-    // Create a unique folder for this session
+    // 2. Create a unique folder and save files
     const sessionId = uuidv4();
     const uploadsDir = path.join(process.cwd(), 'public', 'uploads', sessionId);
     await fs.mkdir(uploadsDir, { recursive: true });
 
-    // Helper to save a file and return its buffer
-    const saveFile = async (file: File, name: string) => {
+    const saveFile = async (file: File, name: string): Promise<Buffer> => {
       const buffer = Buffer.from(await file.arrayBuffer());
       await fs.writeFile(path.join(uploadsDir, name), buffer);
       return buffer;
     };
 
-    const originalBuffer = await saveFile(originalFile, 'english.pdf');
-    const groundTruthBuffer = await saveFile(groundTruthFile, 'groundtruth.pdf');
-    const llmBuffer = await saveFile(llmFile, 'translated.pdf');
-
-    // Extract text
-    const [groundData, llmData] = await Promise.all([
-      pdfParse(groundTruthBuffer),
-      pdfParse(llmBuffer),
+    const [originalBuffer, groundTruthBuffer, llmBuffer] = await Promise.all([
+      saveFile(originalFile, 'english.pdf'),
+      saveFile(groundTruthFile, 'groundtruth.pdf'),
+      saveFile(llmFile, 'translated.pdf')
     ]);
 
-    // Compute diffs
-    const diffs = diffWords(groundData.text, llmData.text);
+    // 3. Extract text using the robust method
+    const [groundTruthText, llmText] = await Promise.all([
+      extractTextFromPdf(groundTruthBuffer),
+      extractTextFromPdf(llmBuffer),
+    ]);
+
+    // 4. Compute differences
+    const diffs = diffWords(groundTruthText, llmText);
     const phrasesToHighlight = diffs
       .filter(part => part.removed)
       .map(part => part.value.trim())
       .filter(Boolean);
 
-    // Build suggestions
     const suggestions = phrasesToHighlight.map(phrase => ({
       originalPhrase: phrase,
       correction: 'Suggested fix here',
       reason: 'Differs from ground truth',
     }));
 
-    // Return URLs and results
+    // 5. Return URLs and results
     const baseUrl = `/uploads/${sessionId}`;
     return NextResponse.json({
       translatedPdfUrl: `${baseUrl}/translated.pdf`,
