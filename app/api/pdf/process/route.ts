@@ -1,7 +1,6 @@
 // app/api/pdf/process/route.ts
 
 // Polyfill to ensure pdfjs-dist works correctly in Next.js
-import '@ungap/with-resolvers';
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
