@@ -6,11 +6,13 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { diffWords } from 'diff';
 
-// --- ROBUST PDF PARSING SETUP ---
+// --- DEFINITIVE PDF PARSING SETUP for Next.js Server Environment ---
+// Import from the main entry to get TypeScript types.
 import * as pdfjs from 'pdfjs-dist';
 
-// CORRECTED WORKER IMPORT for modern versions of pdfjs-dist
-import 'pdfjs-dist/build/pdf.worker.mjs';
+// Use require.resolve to get the absolute path to the worker script for the runtime.
+// This combination satisfies both TypeScript and the Next.js runtime.
+pdfjs.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/build/pdf.worker.mjs');
 
 
 // --- CONSTANTS AND HELPERS ---
