@@ -1,12 +1,19 @@
+// File: app/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { Worker } from '@react-pdf-viewer/core'; // <--- 1. IMPORT WORKER
 import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
 import { searchPlugin } from '@react-pdf-viewer/search';
 import { usePdfReview } from '../hooks/usePdfReview';
 import { FileUpload } from './components/FileUpload';
 import { PdfViewerLayout } from './components/PdfViewerLayout';
 import { SuggestionsTable } from './components/SuggestionsTable';
+
+// --- 2. DEFINE WORKER URL ---
+// This points to the pdf.worker.js file you manually placed in the /public directory.
+const workerUrl = '/pdf.worker.js';
+
 
 export default function Home() {
   // File states
@@ -187,20 +194,22 @@ export default function Home() {
             </button>
           </div>
         )}
-        {/* PDF Viewers */}
-        <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <PdfViewerLayout
-            title="English Original"
-            fileUrl={originalPdfUrl}
-            pluginInstances={[defaultLayoutPluginInstance]}
-          />
-          <PdfViewerLayout
-            title="LLM German"
-            fileUrl={llmPdfUrl}
-            pluginInstances={[defaultLayoutPluginInstance, searchPluginInstance]}
-            highlightMessage={highlightMessage}
-          />
-        </div>
+        {/* --- 3. WRAP THE PDF VIEWERS IN THE WORKER COMPONENT --- */}
+        <Worker workerUrl={workerUrl}>
+          <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <PdfViewerLayout
+              title="English Original"
+              fileUrl={originalPdfUrl}
+              pluginInstances={[defaultLayoutPluginInstance]}
+            />
+            <PdfViewerLayout
+              title="LLM German"
+              fileUrl={llmPdfUrl}
+              pluginInstances={[defaultLayoutPluginInstance, searchPluginInstance]}
+              highlightMessage={highlightMessage}
+            />
+          </div>
+        </Worker>
         {/* Suggestions & Restart */}
         {reviewData && (
           <>
